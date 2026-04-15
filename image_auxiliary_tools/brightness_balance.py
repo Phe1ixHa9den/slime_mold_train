@@ -156,8 +156,8 @@ def main():
         description="批量平衡图像高光并可选整体降低亮度",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--input_dir", default="output_resized2", help="输入文件夹路径")
-    parser.add_argument("--output_dir", default="balanced2", help="输出文件夹路径")
+    parser.add_argument("--input_dir", default="./processed_data/output_resized", help="输入文件夹路径")
+    parser.add_argument("--output_dir", default="./processed_data/balanced", help="输出文件夹路径")
     parser.add_argument("--strength", type=float, default=1.5,
                         help="高光压缩强度 (0.5~2.5)，默认1.0。若启用--auto则此参数被忽略")
     parser.add_argument("--auto", action="store_true",

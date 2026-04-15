@@ -109,7 +109,7 @@ if __name__ == "__main__":
     # ========== 用户配置区域 ==========
     # 1. 设置输入和输出文件夹路径
     INPUT_DIR = "./data2"
-    OUTPUT_DIR = "./output_cropped"
+    OUTPUT_DIR = "./processed_data/output_cropped"
 
     # 2. 设置四点坐标 (x, y) —— 请根据你的图片实际坐标修改
     #    顺序：[左上, 右上, 右下, 左下] （适用于透视变换）

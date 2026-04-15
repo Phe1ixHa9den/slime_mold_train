@@ -81,9 +81,9 @@ def resize_images(input_dir, output_dir, target_size=(256, 256), mode='stretch')
 
 if __name__ == "__main__":
     # ========== 用户配置区域 ==========
-    INPUT_DIR = "./output_cropped"    # 输入文件夹
-    OUTPUT_DIR = "./output_resized" # 输出文件夹
-    TARGET_SIZE = (256, 256)        # 目标尺寸 (宽, 高)
+    INPUT_DIR = "./processed_data/output_cropped"    # 输入文件夹
+    OUTPUT_DIR = "./processed_data/output_resized" # 输出文件夹
+    TARGET_SIZE = (128, 128)        # 目标尺寸 (宽, 高)
     MODE = 'stretch'                # 'stretch' 或 'letterbox'
     # =================================
 
