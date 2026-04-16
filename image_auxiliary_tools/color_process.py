@@ -111,8 +111,8 @@ def batch_process(input_folder, output_folder, params=None):
 
 if __name__ == "__main__":
     # ========== 配置区域 ==========
-    INPUT_DIR = "./processed_data/balanced"      # 输入文件夹路径
-    OUTPUT_DIR = "./processed_data/color_processed_images_final"    # 输出文件夹路径
+    INPUT_DIR = "./processed_data_1/balanced"      # 输入文件夹路径
+    OUTPUT_DIR = "./processed_data_1/color_processed_images_final"    # 输出文件夹路径
     
     # 可选：自定义参数（不设置则使用默认值）
     custom_params = {

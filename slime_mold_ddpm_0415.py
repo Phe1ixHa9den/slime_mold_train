@@ -305,7 +305,7 @@ def train_diffusion(model, diffusion, dataloader, optimizer, epochs, device):
         avg_loss = total_loss / len(dataloader)
         epoch_losses.append(avg_loss)
         print(f"Epoch {epoch+1} average loss: {avg_loss:.6f}")
-        return epoch_losses
+    return epoch_losses
 
 def evaluate_and_visualize(model, diffusion, dataset, device, cond_len, img_shape, num_samples=4):
     model.eval()
@@ -345,7 +345,7 @@ def evaluate_and_visualize(model, diffusion, dataset, device, cond_len, img_shap
 # -------------------- 5. 主函数 --------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default="./processed_data/color_processed_images_final", help='图片序列文件夹路径')
+    parser.add_argument('--data_dir', type=str, default="./processed_data_1/color_processed_images_final", help='图片序列文件夹路径')
     parser.add_argument('--cond_len', type=int, default=4, help='历史帧数')
     parser.add_argument('--img_size', type=int, default=128, help='图像缩放尺寸')
     parser.add_argument('--batch_size', type=int, default=8, help='批大小')
@@ -353,7 +353,7 @@ def main():
     parser.add_argument('--lr', type=float, default=1e-4, help='学习率')
     parser.add_argument('--num_timesteps', type=int, default=1000, help='扩散步数')
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
-    parser.add_argument('--save_model', type=str, default='./generate_model/diffusion_model_128_0415.pth', help='模型保存路径')
+    parser.add_argument('--save_model', type=str, default='./generate_model/diffusion_model_128_0416_1.pth', help='模型保存路径')
     args = parser.parse_args()
     
     # 数据集

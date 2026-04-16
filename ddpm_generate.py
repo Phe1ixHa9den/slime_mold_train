@@ -8,7 +8,7 @@ import numpy as np
 import argparse
 from glob import glob
 
-# -------------------- 模型定义（与训练时完全一致） --------------------
+# -------------------- 模型定义（与训练脚本完全一致） --------------------
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -69,15 +69,22 @@ class Upsample(nn.Module):
         return self.conv(x)
 
 class UNet(nn.Module):
-    def __init__(self, in_channels, cond_channels, img_size=256, time_dim=256,
-                 down_channels=[64, 128, 256, 512, 512]):
+    """条件U-Net，输入包括：噪声图像 + 条件帧拼接，以及时间步嵌入"""
+    def __init__(self, in_channels, cond_channels, img_size, time_dim=256):
         super().__init__()
+        """
+        Args:
+            in_channels: 噪声图像的通道数（通常为3）
+            cond_channels: 条件帧的通道数（cond_len * 3）
+            img_size: 图像大小（H,W），用于自动计算下采样次数
+            time_dim: 时间嵌入维度
+        """
         self.in_channels = in_channels
         self.cond_channels = cond_channels
+        self.img_size = img_size
         self.time_dim = time_dim
-        self.down_channels = down_channels
-        self.num_levels = len(down_channels) - 1
         
+        # 时间嵌入
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(time_dim),
             nn.Linear(time_dim, time_dim),
@@ -85,48 +92,76 @@ class UNet(nn.Module):
             nn.Linear(time_dim, time_dim)
         )
         
-        self.enc_blocks = nn.ModuleList()
-        self.down_blocks = nn.ModuleList()
-        in_ch = in_channels + cond_channels
-        for i, out_ch in enumerate(down_channels):
-            self.enc_blocks.append(Block(in_ch, out_ch, time_dim))
-            in_ch = out_ch
-            if i < self.num_levels:
-                self.down_blocks.append(Downsample(out_ch))
+        # 编码器（增加一层下采样）
+        self.enc1 = Block(in_channels + cond_channels, 64, time_dim)
+        self.down1 = Downsample(64)      # 64 -> 32 (若原图128，这里变为64)
+        self.enc2 = Block(64, 128, time_dim)
+        self.down2 = Downsample(128)     # 128 -> 64 (64->32)
+        self.enc3 = Block(128, 256, time_dim)
+        self.down3 = Downsample(256)     # 256 -> 128 (32->16)
+        self.enc4 = Block(256, 512, time_dim)   # 新增编码块
+        self.down4 = Downsample(512)     # 512 -> 256 (16->8)
         
-        self.mid_block = Block(down_channels[-1], down_channels[-1], time_dim)
+        # 中间层
+        self.mid = Block(512, 512, time_dim)
         
-        self.up_blocks = nn.ModuleList()
-        self.dec_blocks = nn.ModuleList()
-        for i in reversed(range(self.num_levels)):
-            up_in_ch = down_channels[i+1]
-            self.up_blocks.append(Upsample(up_in_ch))
-            dec_in_ch = up_in_ch + down_channels[i]
-            dec_out_ch = down_channels[i]
-            self.dec_blocks.append(Block(dec_in_ch, dec_out_ch, time_dim))
+        # 解码器（对称增加上采样）
+        self.up4 = Upsample(512)
+        self.dec4 = Block(512 + 512, 256, time_dim)  # 跳跃连接来自enc4
+        self.up3 = Upsample(256)
+        self.dec3 = Block(256 + 256, 128, time_dim)  # 跳跃连接来自enc3
+        self.up2 = Upsample(128)
+        self.dec2 = Block(128 + 128, 64, time_dim)
+        self.up1 = Upsample(64)
+        self.dec1 = Block(64 + 64, 64, time_dim)
         
-        self.out_conv = nn.Conv2d(down_channels[0], in_channels, 1)
+        # 输出层
+        self.out_conv = nn.Conv2d(64, in_channels, 1)
         
     def forward(self, x, cond, t):
-        x = torch.cat([x, cond], dim=1)
-        t_emb = self.time_mlp(t)
+        # 拼接输入
+        x = torch.cat([x, cond], dim=1)  # (B, C+cond_channels, H, W)
+    
+        # 计算时间嵌入
+        t_emb = self.time_mlp(t)  # (B, time_dim)
+    
+        # 编码
+        e1 = self.enc1(x, t_emb)
+        d1 = self.down1(e1)
+        e2 = self.enc2(d1, t_emb)
+        d2 = self.down2(e2)
+        e3 = self.enc3(d2, t_emb)
+        d3 = self.down3(e3)
+        e4 = self.enc4(d3, t_emb)
+        d4 = self.down4(e4)
+    
+        # 中间
+        m = self.mid(d4, t_emb)
+    
+        # 解码
+        u4 = self.up4(m)
+        u4 = torch.cat([u4, e4], dim=1)
+        d4_out = self.dec4(u4, t_emb)
         
-        skip_features = []
-        for i, enc in enumerate(self.enc_blocks):
-            x = enc(x, t_emb)
-            if i < self.num_levels:
-                skip_features.append(x)
-                x = self.down_blocks[i](x)
+        u3 = self.up3(d4_out)
+        u3 = torch.cat([u3, e3], dim=1)
+        d3_out = self.dec3(u3, t_emb)
         
-        x = self.mid_block(x, t_emb)
+        u2 = self.up2(d3_out)
+        u2 = torch.cat([u2, e2], dim=1)
+        d2_out = self.dec2(u2, t_emb)
         
-        for i, (up, dec) in enumerate(zip(self.up_blocks, self.dec_blocks)):
-            x = up(x)
-            skip = skip_features[-i-1]
-            x = torch.cat([x, skip], dim=1)
-            x = dec(x, t_emb)
-        
-        return self.out_conv(x)
+        u1 = self.up1(d2_out)
+        u1 = torch.cat([u1, e1], dim=1)
+        d1_out = self.dec1(u1, t_emb)
+    
+        out = self.out_conv(d1_out)
+        return out
+
+# -------------------- 扩散过程（与生成脚本相同，略） --------------------
+# 注意：下面的 GaussianDiffusion、get_transform、denormalize、load_cond_frames、
+# save_image、generate_sequence 以及 main 函数完全保持你原来的代码不变。
+# 由于篇幅，这里只粘贴 UNet 相关替换部分，实际使用时请将下面的扩散过程等粘贴回来。
 
 # -------------------- 扩散过程 --------------------
 class GaussianDiffusion:
@@ -232,13 +267,13 @@ def generate_sequence(model, diffusion, cond_seq, num_frames, img_shape, device)
 # -------------------- 主程序 --------------------
 def main():
     parser = argparse.ArgumentParser(description="使用训练好的扩散模型生成图像序列")
-    parser.add_argument('--checkpoint', type=str, default="diffusion_model_256.pth", help='模型检查点路径 (.pth)')
-    parser.add_argument('--cond_dir', type=str, default="./test_data/test_1", help='条件帧所在文件夹（按文件名排序）')
+    parser.add_argument('--checkpoint', type=str, default="./generate_model/diffusion_model_128_0416_1.pth", help='模型检查点路径 (.pth)')
+    parser.add_argument('--cond_dir', type=str, default="./test_data/test_1_1", help='条件帧所在文件夹（按文件名排序）')
     parser.add_argument('--cond_files', type=str, nargs='+', default=None, help='直接指定条件帧图像文件路径列表')
     parser.add_argument('--cond_len', type=int, default=4, help='模型需要的条件帧数量')
     parser.add_argument('--img_size', type=int, default=128, help='图像尺寸 (正方形)')
     parser.add_argument('--num_frames', type=int, default=10, help='要生成的帧数')
-    parser.add_argument('--output_dir', type=str, default='./test_generated_1_200_epoch_0415', help='输出目录')
+    parser.add_argument('--output_dir', type=str, default='./test_generated_200_epoch_0416/test_1_1', help='输出目录')
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--num_timesteps', type=int, default=1000, help='扩散步数（需与训练一致）')
     parser.add_argument('--seed', type=int, default=None, help='随机种子')
@@ -270,8 +305,7 @@ def main():
     cond_channels = args.cond_len * in_channels
     img_shape = (in_channels, args.img_size, args.img_size)
     
-    model = UNet(in_channels, cond_channels, img_size=args.img_size, time_dim=256,
-                 down_channels=[64, 128, 256, 512, 512]).to(args.device)
+    model = UNet(in_channels, cond_channels, img_size=args.img_size, time_dim=256).to(args.device)
     
     # 加载检查点
     checkpoint = torch.load(args.checkpoint, map_location=args.device)

@@ -108,8 +108,8 @@ def batch_crop_images(input_dir, output_dir, crop_points, crop_mode='rectangle',
 if __name__ == "__main__":
     # ========== 用户配置区域 ==========
     # 1. 设置输入和输出文件夹路径
-    INPUT_DIR = "./data2"
-    OUTPUT_DIR = "./processed_data/output_cropped"
+    INPUT_DIR = "./data1"
+    OUTPUT_DIR = "./processed_data_1/output_cropped"
 
     # 2. 设置四点坐标 (x, y) —— 请根据你的图片实际坐标修改
     #    顺序：[左上, 右上, 右下, 左下] （适用于透视变换）
